@@ -19,7 +19,6 @@ export function MemberEditor({ member }: { member: PickableMember }) {
   return (
     <Card className="p-4">
       <form action={updateMember} className="flex flex-col gap-3">
-        <input type="hidden" name="id" value={member.id} />
         <input type="hidden" name="emoji" value={emoji} />
         <input type="hidden" name="colorHex" value={color} />
         <div className="flex items-center gap-3">

@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { prisma } from "@/lib/prisma";
 import { requireMember } from "@/lib/session";
 import { logout } from "@/actions/auth";
 import { toggleAway } from "@/actions/members";
@@ -10,25 +9,17 @@ import { PinForm } from "./PinForm";
 
 export default async function SettingsPage() {
   const me = await requireMember();
-  const members = await prisma.member.findMany({
-    orderBy: { order: "asc" },
-    select: { id: true, name: true, emoji: true, colorHex: true },
-  });
 
   return (
     <div className="flex flex-col gap-6">
       <div>
         <h1 className="text-3xl font-extrabold">Settings ⚙️</h1>
         <p className="font-semibold text-ink/60">
-          Names, characters &amp; colors. Tap an avatar to customize
+          Your name, character &amp; color, this is you only
         </p>
       </div>
 
-      <div className="flex flex-col gap-3">
-        {members.map((m) => (
-          <MemberEditor key={m.id} member={m} />
-        ))}
-      </div>
+      <MemberEditor member={me} />
 
       <Card className="flex flex-col items-start gap-3 p-4">
         <h2 className="font-display text-lg font-bold">

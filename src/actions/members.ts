@@ -6,8 +6,7 @@ import { requireMember } from "@/lib/session";
 import { EMOJI_OPTIONS, COLOR_OPTIONS } from "@/lib/characters";
 
 export async function updateMember(formData: FormData) {
-  await requireMember();
-  const id = Number(formData.get("id"));
+  const me = await requireMember();
   const name = String(formData.get("name") ?? "").trim();
   const emoji = String(formData.get("emoji") ?? "").trim();
   const colorHex = String(formData.get("colorHex") ?? "").trim();
@@ -16,7 +15,7 @@ export async function updateMember(formData: FormData) {
   if (!COLOR_OPTIONS.includes(colorHex as (typeof COLOR_OPTIONS)[number]))
     return;
   await prisma.member.update({
-    where: { id },
+    where: { id: me.id },
     data: { name, emoji, colorHex },
   });
   revalidatePath("/", "layout");
