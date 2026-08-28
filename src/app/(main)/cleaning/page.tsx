@@ -10,21 +10,20 @@ import { requireMember } from "@/lib/session";
 import { Avatar } from "@/components/ui/Avatar";
 import { Card } from "@/components/ui/Card";
 import { TaskChecklist } from "./TaskChecklist";
+import { taskColor } from "@/lib/cleaningTasks";
 
 export default async function CleaningPage() {
   const me = await requireMember();
-  const { weekStart, assignments } = await getWeekAssignments();
+  const { weekStart, assignments, blockedIds } = await getWeekAssignments();
   const doneCount = assignments.filter((a) => a.done).length;
 
   const nextWeekStart = currentWeekStart(addWeeks(new Date(), 1));
-  const [tasks, members, pastWeeks, blockedIds, nextBlockedIds] =
-    await Promise.all([
-      prisma.cleaningTask.findMany({ orderBy: { order: "asc" } }),
-      prisma.member.findMany({ orderBy: { order: "asc" } }),
-      getPastWeeks(4),
-      getBlockedMemberIds(weekStart),
-      getBlockedMemberIds(nextWeekStart),
-    ]);
+  const [tasks, members, pastWeeks, nextBlockedIds] = await Promise.all([
+    prisma.cleaningTask.findMany({ orderBy: { order: "asc" } }),
+    prisma.member.findMany({ orderBy: { order: "asc" } }),
+    getPastWeeks(4),
+    getBlockedMemberIds(nextWeekStart),
+  ]);
   const nextRot = rotationIndex(nextWeekStart);
   const awayMembers = members.filter((m) => m.isAway);
   const blockedThisWeek = members.filter(
@@ -74,13 +73,13 @@ export default async function CleaningPage() {
         {assignments.map((a, i) => (
           <TaskChecklist
             key={a.id}
+            cleaningWeekId={a.id}
             taskEmoji={a.task.emoji}
             taskName={a.task.name}
             member={a.member}
             memberAway={a.member.isAway || blockedIds.has(a.member.id)}
             subtasks={a.task.subtasks}
             subtaskChecks={a.subtaskChecks}
-            done={a.done}
             isMine={a.memberId === me.id}
             animationDelay={i * 60}
           />
@@ -97,7 +96,12 @@ export default async function CleaningPage() {
                 key={task.id}
                 className="flex items-center gap-2 text-sm font-semibold"
               >
-                <span className="text-lg">{task.emoji}</span>
+                <span
+                  className="flex size-7 shrink-0 items-center justify-center rounded-full border-2 border-ink text-sm"
+                  style={{ backgroundColor: `${taskColor(task.name)}33` }}
+                >
+                  {task.emoji}
+                </span>
                 <span className="flex-1">{task.name}</span>
                 <span className="text-ink/60">{member.name}</span>
                 <Avatar

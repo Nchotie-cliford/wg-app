@@ -13,14 +13,35 @@ export async function getBlockedMemberIds(weekStart: Date) {
 
 export async function getWeekAssignments(date = new Date()) {
   const weekStart = currentWeekStart(date);
-  const [tasks, members, blockedIds] = await Promise.all([
+  const [tasks, members, blockedIds, existing] = await Promise.all([
     prisma.cleaningTask.findMany({
       orderBy: { order: "asc" },
       include: { subtasks: { orderBy: { order: "asc" } } },
     }),
     prisma.member.findMany({ orderBy: { order: "asc" } }),
     getBlockedMemberIds(weekStart),
+    prisma.cleaningWeek.findMany({
+      where: { weekStart },
+      include: {
+        task: { include: { subtasks: { orderBy: { order: "asc" } } } },
+        member: true,
+        subtaskChecks: true,
+      },
+      orderBy: { task: { order: "asc" } },
+    }),
   ]);
+
+  // Fast path: on every load after the first one this week, everything
+  // already exists, so skip straight to returning it (avoids ~4 extra
+  // sequential round-trips on what is by far the common case).
+  const isComplete = tasks.every((task) => {
+    const week = existing.find((w) => w.taskId === task.id);
+    return week && week.subtaskChecks.length === task.subtasks.length;
+  });
+  if (isComplete) {
+    return { weekStart, assignments: existing, blockedIds };
+  }
+
   const rot = rotationIndex(weekStart);
   const activeMembers = members.filter(
     (m) => !m.isAway && !blockedIds.has(m.id)
@@ -68,7 +89,7 @@ export async function getWeekAssignments(date = new Date()) {
     },
     orderBy: { task: { order: "asc" } },
   });
-  return { weekStart, assignments };
+  return { weekStart, assignments, blockedIds };
 }
 
 export async function getPastWeeks(count = 4, date = new Date()) {

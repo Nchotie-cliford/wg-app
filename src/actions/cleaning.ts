@@ -7,25 +7,23 @@ import { requireMember } from "@/lib/session";
 export async function toggleSubtask(formData: FormData) {
   const me = await requireMember();
   const id = Number(formData.get("id"));
-  const check = await prisma.subtaskCheck.findUnique({
-    where: { id },
-    include: { cleaningWeek: true },
-  });
-  if (!check || check.cleaningWeek.memberId !== me.id) return;
+  const cleaningWeekId = Number(formData.get("cleaningWeekId"));
+  const done = formData.get("done") === "true";
 
-  await prisma.subtaskCheck.update({
-    where: { id },
-    data: { done: !check.done },
+  const result = await prisma.subtaskCheck.updateMany({
+    where: { id, cleaningWeekId, cleaningWeek: { memberId: me.id } },
+    data: { done },
   });
+  if (result.count === 0) return;
 
-  const allChecks = await prisma.subtaskCheck.findMany({
-    where: { cleaningWeekId: check.cleaningWeekId },
-  });
-  const allDone = allChecks.every((c) => c.done);
-  await prisma.cleaningWeek.update({
-    where: { id: check.cleaningWeekId },
-    data: { done: allDone },
-  });
+  await prisma.$executeRaw`
+    UPDATE "CleaningWeek"
+    SET "done" = NOT EXISTS (
+      SELECT 1 FROM "SubtaskCheck"
+      WHERE "cleaningWeekId" = ${cleaningWeekId} AND "done" = false
+    )
+    WHERE "id" = ${cleaningWeekId}
+  `;
 
   revalidatePath("/cleaning");
   revalidatePath("/");

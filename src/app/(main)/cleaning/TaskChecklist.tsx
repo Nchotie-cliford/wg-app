@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useOptimistic, useState, useTransition } from "react";
 import { toggleSubtask } from "@/actions/cleaning";
 import { Avatar } from "@/components/ui/Avatar";
+import { taskColor, taskBlurb } from "@/lib/cleaningTasks";
 
 type Subtask = { id: number; label: string; order: number };
 type SubtaskCheck = { id: number; subtaskId: number; done: boolean };
@@ -15,30 +16,51 @@ type AssignmentMember = {
 };
 
 export function TaskChecklist({
+  cleaningWeekId,
   taskEmoji,
   taskName,
   member,
   memberAway,
   subtasks,
   subtaskChecks,
-  done,
   isMine,
   animationDelay,
 }: {
+  cleaningWeekId: number;
   taskEmoji: string;
   taskName: string;
   member: AssignmentMember;
   memberAway: boolean;
   subtasks: Subtask[];
   subtaskChecks: SubtaskCheck[];
-  done: boolean;
   isMine: boolean;
   animationDelay: number;
 }) {
   const [open, setOpen] = useState(false);
+  const [, startTransition] = useTransition();
+  const [optimisticChecks, applyOptimistic] = useOptimistic(
+    subtaskChecks,
+    (state, toggledId: number) =>
+      state.map((c) => (c.id === toggledId ? { ...c, done: !c.done } : c))
+  );
+
   const checkFor = (subtaskId: number) =>
-    subtaskChecks.find((c) => c.subtaskId === subtaskId);
-  const doneCount = subtaskChecks.filter((c) => c.done).length;
+    optimisticChecks.find((c) => c.subtaskId === subtaskId);
+  const doneCount = optimisticChecks.filter((c) => c.done).length;
+  const done = optimisticChecks.length > 0 && doneCount === optimisticChecks.length;
+  const color = taskColor(taskName);
+  const blurb = taskBlurb(taskName);
+
+  const handleToggle = (check: SubtaskCheck) => {
+    startTransition(async () => {
+      applyOptimistic(check.id);
+      const fd = new FormData();
+      fd.set("id", String(check.id));
+      fd.set("cleaningWeekId", String(cleaningWeekId));
+      fd.set("done", String(!check.done));
+      await toggleSubtask(fd);
+    });
+  };
 
   return (
     <div
@@ -52,7 +74,12 @@ export function TaskChecklist({
           done ? "bg-mint/40" : "bg-white"
         } ${isMine ? "hover:-translate-y-0.5 active:scale-[0.98]" : "opacity-80"}`}
       >
-        <span className="text-3xl">{taskEmoji}</span>
+        <span
+          className="flex size-12 shrink-0 items-center justify-center rounded-full border-2 border-ink text-2xl"
+          style={{ backgroundColor: `${color}33` }}
+        >
+          {taskEmoji}
+        </span>
         <span className="flex-1">
           <span
             className={`block font-display text-lg font-bold ${
@@ -63,7 +90,7 @@ export function TaskChecklist({
           </span>
           <span className="text-sm font-semibold text-ink/60">
             {isMine ? "Your turn" : `Only ${member.name} can mark this`} ·{" "}
-            {doneCount}/{subtaskChecks.length}
+            {doneCount}/{optimisticChecks.length}
           </span>
         </span>
         <Avatar member={member} size="sm" away={memberAway} />
@@ -76,8 +103,16 @@ export function TaskChecklist({
         </span>
       </button>
 
+      {/* Colored strip so each task reads as a distinct area at a glance */}
+      <div className="h-1.5" style={{ backgroundColor: color }} />
+
       {open && (
         <div className="animate-pop-in flex flex-col gap-1 border-t-2 border-ink bg-cream p-3">
+          {blurb && (
+            <p className="mb-1 text-xs font-bold uppercase tracking-wide text-ink/40">
+              {blurb}
+            </p>
+          )}
           {subtasks.map((subtask) => {
             const check = checkFor(subtask.id);
             if (!check) return null;
@@ -107,15 +142,14 @@ export function TaskChecklist({
               );
             }
             return (
-              <form key={subtask.id} action={toggleSubtask}>
-                <input type="hidden" name="id" value={check.id} />
-                <button
-                  type="submit"
-                  className="flex w-full items-center gap-2 rounded-lg p-1.5 text-left transition-colors hover:bg-white active:scale-[0.98]"
-                >
-                  {row}
-                </button>
-              </form>
+              <button
+                key={subtask.id}
+                type="button"
+                onClick={() => handleToggle(check)}
+                className="flex w-full items-center gap-2 rounded-lg p-1.5 text-left transition-colors hover:bg-white active:scale-[0.98]"
+              >
+                {row}
+              </button>
             );
           })}
         </div>
