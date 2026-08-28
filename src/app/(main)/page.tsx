@@ -2,27 +2,36 @@ import Link from "next/link";
 import { format, startOfDay } from "date-fns";
 import { prisma } from "@/lib/prisma";
 import { requireMember } from "@/lib/session";
-import { getWeekAssignments } from "@/lib/cleaning";
+import { getWeekAssignments, getPastWeeks } from "@/lib/cleaning";
 import { computeBalances, euro } from "@/lib/balances";
 import { Card } from "@/components/ui/Card";
 import { Avatar } from "@/components/ui/Avatar";
 
 export default async function DashboardPage() {
   const me = await requireMember();
-  const [{ assignments }, members, expenses, payments, openItems, nextEvent] =
-    await Promise.all([
-      getWeekAssignments(),
-      prisma.member.findMany({ orderBy: { order: "asc" } }),
-      prisma.expense.findMany({ include: { shares: true } }),
-      prisma.payment.findMany(),
-      prisma.shoppingItem.count({ where: { done: false } }),
-      prisma.event.findFirst({
-        where: { date: { gte: startOfDay(new Date()) } },
-        orderBy: { date: "asc" },
-      }),
-    ]);
+  const [
+    { assignments },
+    members,
+    expenses,
+    payments,
+    openItems,
+    nextEvent,
+    [lastWeek],
+  ] = await Promise.all([
+    getWeekAssignments(),
+    prisma.member.findMany({ orderBy: { order: "asc" } }),
+    prisma.expense.findMany({ include: { shares: true } }),
+    prisma.payment.findMany(),
+    prisma.shoppingItem.count({ where: { done: false } }),
+    prisma.event.findFirst({
+      where: { date: { gte: startOfDay(new Date()) } },
+      orderBy: { date: "asc" },
+    }),
+    getPastWeeks(1),
+  ]);
 
   const myTasks = assignments.filter((a) => a.memberId === me.id);
+  const missedLastWeek = lastWeek?.rows.filter((r) => !r.done) ?? [];
   const myBalance =
     computeBalances(members, expenses, payments).balances.find(
       (b) => b.member.id === me.id
@@ -68,6 +77,27 @@ export default async function DashboardPage() {
           )}
         </Card>
       </Link>
+
+      {missedLastWeek.length > 0 && (
+        <Link href="/cleaning">
+          <Card className="animate-pop-in bg-coral/15 p-4 transition-all hover:-translate-y-0.5">
+            <h2 className="font-display text-lg font-bold">
+              Last week&apos;s leftovers 😅
+            </h2>
+            <div className="mt-1 flex flex-wrap gap-2">
+              {missedLastWeek.map((r) => (
+                <span
+                  key={r.id}
+                  className="flex items-center gap-1 rounded-full border-2 border-ink bg-white px-2 py-1 text-xs font-bold"
+                >
+                  {r.task.emoji} {r.task.name}: {r.member.emoji}{" "}
+                  {r.member.name}
+                </span>
+              ))}
+            </div>
+          </Card>
+        </Link>
+      )}
 
       <div className="grid grid-cols-2 gap-4">
         <Link href="/balances">
