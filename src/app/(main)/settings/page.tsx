@@ -76,10 +76,6 @@ export default async function SettingsPage() {
           </form>
         </div>
       </Card>
-
-      <p className="text-center text-xs font-semibold text-ink/40">
-        Flat PIN can be changed in the .env file (WG_APP_PIN)
-      </p>
     </div>
   );
 }

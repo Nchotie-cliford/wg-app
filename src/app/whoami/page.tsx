@@ -1,12 +1,7 @@
-import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { AUTH_COOKIE, AUTH_VALUE } from "@/lib/session";
 import { MemberPicker } from "./MemberPicker";
 
 export default async function WhoAmIPage() {
-  const store = await cookies();
-  if (store.get(AUTH_COOKIE)?.value !== AUTH_VALUE) redirect("/login");
   const members = await prisma.member.findMany({
     orderBy: { order: "asc" },
     select: { id: true, name: true, emoji: true, colorHex: true },
