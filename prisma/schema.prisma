@@ -38,11 +38,21 @@ model Payment {
 }
 
 model CleaningTask {
-  id            Int            @id @default(autoincrement())
+  id            Int               @id @default(autoincrement())
   name          String
   emoji         String
-  order         Int            @unique
+  order         Int               @unique
   cleaningWeeks CleaningWeek[]
+  subtasks      CleaningSubtask[]
+}
+
+model CleaningSubtask {
+  id     Int    @id @default(autoincrement())
+  task   CleaningTask @relation(fields: [taskId], references: [id])
+  taskId Int
+  label  String
+  order  Int
+  checks SubtaskCheck[]
 }
 
 model CleaningWeek {
@@ -53,8 +63,20 @@ model CleaningWeek {
   member    Member       @relation(fields: [memberId], references: [id])
   memberId  Int
   done      Boolean      @default(false)
+  subtaskChecks SubtaskCheck[]
 
   @@unique([weekStart, taskId])
+}
+
+model SubtaskCheck {
+  id             Int             @id @default(autoincrement())
+  cleaningWeek   CleaningWeek    @relation(fields: [cleaningWeekId], references: [id], onDelete: Cascade)
+  cleaningWeekId Int
+  subtask        CleaningSubtask @relation(fields: [subtaskId], references: [id], onDelete: Cascade)
+  subtaskId      Int
+  done           Boolean         @default(false)
+
+  @@unique([cleaningWeekId, subtaskId])
 }
 
 model Expense {

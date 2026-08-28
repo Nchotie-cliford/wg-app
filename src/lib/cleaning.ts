@@ -14,7 +14,10 @@ export async function getBlockedMemberIds(weekStart: Date) {
 export async function getWeekAssignments(date = new Date()) {
   const weekStart = currentWeekStart(date);
   const [tasks, members, blockedIds] = await Promise.all([
-    prisma.cleaningTask.findMany({ orderBy: { order: "asc" } }),
+    prisma.cleaningTask.findMany({
+      orderBy: { order: "asc" },
+      include: { subtasks: { orderBy: { order: "asc" } } },
+    }),
     prisma.member.findMany({ orderBy: { order: "asc" } }),
     getBlockedMemberIds(weekStart),
   ]);
@@ -23,17 +26,46 @@ export async function getWeekAssignments(date = new Date()) {
     (m) => !m.isAway && !blockedIds.has(m.id)
   );
   const pool = activeMembers.length > 0 ? activeMembers : members;
-  for (const task of tasks) {
-    const member = pool[(rot + task.order) % pool.length];
-    await prisma.cleaningWeek.upsert({
-      where: { weekStart_taskId: { weekStart, taskId: task.id } },
-      update: {},
-      create: { weekStart, taskId: task.id, memberId: member.id },
+
+  const weeks = await Promise.all(
+    tasks.map((task) => {
+      const member = pool[(rot + task.order) % pool.length];
+      return prisma.cleaningWeek.upsert({
+        where: { weekStart_taskId: { weekStart, taskId: task.id } },
+        update: {},
+        create: { weekStart, taskId: task.id, memberId: member.id },
+      });
+    })
+  );
+  const weekIdByTaskId = new Map(weeks.map((w) => [w.taskId, w.id]));
+
+  const existingChecks = await prisma.subtaskCheck.findMany({
+    where: { cleaningWeekId: { in: weeks.map((w) => w.id) } },
+    select: { cleaningWeekId: true, subtaskId: true },
+  });
+  const existingKeys = new Set(
+    existingChecks.map((c) => `${c.cleaningWeekId}:${c.subtaskId}`)
+  );
+  const missing = tasks.flatMap((task) => {
+    const weekId = weekIdByTaskId.get(task.id)!;
+    return task.subtasks
+      .filter((s) => !existingKeys.has(`${weekId}:${s.id}`))
+      .map((s) => ({ cleaningWeekId: weekId, subtaskId: s.id }));
+  });
+  if (missing.length > 0) {
+    await prisma.subtaskCheck.createMany({
+      data: missing,
+      skipDuplicates: true,
     });
   }
+
   const assignments = await prisma.cleaningWeek.findMany({
     where: { weekStart },
-    include: { task: true, member: true },
+    include: {
+      task: { include: { subtasks: { orderBy: { order: "asc" } } } },
+      member: true,
+      subtaskChecks: true,
+    },
     orderBy: { task: { order: "asc" } },
   });
   return { weekStart, assignments };

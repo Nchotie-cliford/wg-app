@@ -5,11 +5,11 @@ import {
   getBlockedMemberIds,
 } from "@/lib/cleaning";
 import { weekLabel, rotationIndex, currentWeekStart } from "@/lib/week";
-import { toggleTaskDone } from "@/actions/cleaning";
 import { prisma } from "@/lib/prisma";
 import { requireMember } from "@/lib/session";
 import { Avatar } from "@/components/ui/Avatar";
 import { Card } from "@/components/ui/Card";
+import { TaskChecklist } from "./TaskChecklist";
 
 export default async function CleaningPage() {
   const me = await requireMember();
@@ -71,68 +71,20 @@ export default async function CleaningPage() {
       </Card>
 
       <div className="flex flex-col gap-3">
-        {assignments.map((a, i) => {
-          const isMine = a.memberId === me.id;
-          const rowClasses = `animate-pop-in flex w-full items-center gap-3 rounded-blob border-2 border-ink p-4 text-left shadow-sticker transition-all ${
-            a.done ? "bg-mint/40" : "bg-white"
-          } ${
-            isMine
-              ? "hover:-translate-y-0.5 active:scale-[0.98] active:shadow-none"
-              : "opacity-70"
-          }`;
-          const inner = (
-            <>
-              <span className="text-3xl">{a.task.emoji}</span>
-              <span className="flex-1">
-                <span
-                  className={`block font-display text-lg font-bold ${
-                    a.done ? "line-through opacity-50" : ""
-                  }`}
-                >
-                  {a.task.name}
-                </span>
-                <span className="text-sm font-semibold text-ink/60">
-                  {isMine ? "Your turn" : `Only ${a.member.name} can mark this`}
-                </span>
-              </span>
-              <Avatar
-                member={a.member}
-                size="sm"
-                away={a.member.isAway || blockedIds.has(a.member.id)}
-              />
-              <span
-                className={`flex size-8 items-center justify-center rounded-full border-2 border-ink text-lg ${
-                  a.done ? "bg-mint" : "bg-white"
-                }`}
-              >
-                {a.done ? "✓" : ""}
-              </span>
-            </>
-          );
-          if (!isMine) {
-            return (
-              <div
-                key={a.id}
-                className={rowClasses}
-                style={{ animationDelay: `${i * 60}ms` }}
-              >
-                {inner}
-              </div>
-            );
-          }
-          return (
-            <form key={a.id} action={toggleTaskDone}>
-              <input type="hidden" name="id" value={a.id} />
-              <button
-                type="submit"
-                className={rowClasses}
-                style={{ animationDelay: `${i * 60}ms` }}
-              >
-                {inner}
-              </button>
-            </form>
-          );
-        })}
+        {assignments.map((a, i) => (
+          <TaskChecklist
+            key={a.id}
+            taskEmoji={a.task.emoji}
+            taskName={a.task.name}
+            member={a.member}
+            memberAway={a.member.isAway || blockedIds.has(a.member.id)}
+            subtasks={a.task.subtasks}
+            subtaskChecks={a.subtaskChecks}
+            done={a.done}
+            isMine={a.memberId === me.id}
+            animationDelay={i * 60}
+          />
+        ))}
       </div>
 
       <Card className="p-4">

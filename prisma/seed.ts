@@ -10,11 +10,53 @@ const members = [
 ];
 
 const tasks = [
-  { name: "Kitchen", emoji: "🍳", order: 0 },
-  { name: "Bathroom", emoji: "🛁", order: 1 },
-  { name: "Toilet", emoji: "🚽", order: 2 },
-  { name: "Floor", emoji: "🧹", order: 3 },
-  { name: "Trash", emoji: "🗑️", order: 4 },
+  {
+    name: "Kitchen",
+    emoji: "🍳",
+    order: 0,
+    subtasks: [
+      "Sweep & mop the kitchen floor",
+      "Empty the dishwasher / put away clean dishes",
+      "Wash, dry & put away anything left in the sink",
+      "Wipe down countertops & stovetop",
+      "Wipe down the kitchen table",
+    ],
+  },
+  {
+    name: "Bathroom",
+    emoji: "🛁",
+    order: 1,
+    subtasks: [
+      "Wipe down sink & counter",
+      "Clean the shower/tub (walls, glass/curtain, drain hair)",
+      "Wipe the mirror",
+      "Sweep & mop the bathroom floor",
+    ],
+  },
+  {
+    name: "Toilet",
+    emoji: "🚽",
+    order: 2,
+    subtasks: [
+      "Scrub the bowl",
+      "Wipe seat, lid & outside of the bowl",
+      "Wipe the flush handle & surrounding wall/tiles",
+      "Top up toilet paper if the flat's stock is out",
+    ],
+  },
+  {
+    name: "Floor & Trash",
+    emoji: "🧹",
+    order: 3,
+    subtasks: [
+      "Sweep & mop common areas",
+      "Empty the kitchen bin",
+      "Empty the bathroom bin",
+      "Empty the toilet bin",
+      "Take everything out to the outside trash & recycling bins",
+      "Restock bin bags where needed",
+    ],
+  },
 ];
 
 async function main() {
@@ -26,13 +68,23 @@ async function main() {
     });
   }
   for (const t of tasks) {
-    await prisma.cleaningTask.upsert({
+    const task = await prisma.cleaningTask.upsert({
       where: { order: t.order },
-      update: {},
-      create: t,
+      update: { name: t.name, emoji: t.emoji },
+      create: { name: t.name, emoji: t.emoji, order: t.order },
     });
+    const existing = await prisma.cleaningSubtask.findMany({
+      where: { taskId: task.id },
+    });
+    if (existing.length === 0) {
+      for (let i = 0; i < t.subtasks.length; i++) {
+        await prisma.cleaningSubtask.create({
+          data: { taskId: task.id, label: t.subtasks[i], order: i },
+        });
+      }
+    }
   }
-  console.log("Seeded 4 members and 4 cleaning tasks.");
+  console.log("Seeded 4 members and 4 cleaning tasks with subtasks.");
 }
 
 main().finally(() => prisma.$disconnect());
