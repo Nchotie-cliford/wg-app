@@ -1,0 +1,126 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Member {
+  id            Int            @id @default(autoincrement())
+  name          String
+  emoji         String
+  colorHex      String
+  pin           String         @default("0000")
+  isAway        Boolean        @default(false)
+  order         Int            @unique
+  cleaningWeeks CleaningWeek[]
+  expenses      Expense[]
+  shoppingItems ShoppingItem[]
+  events        Event[]
+  paymentsSent     Payment[] @relation("paymentFrom")
+  paymentsReceived Payment[] @relation("paymentTo")
+  recurringPaidBy  RecurringExpense[] @relation("recurringPaidBy")
+  recurringAddedBy RecurringExpense[] @relation("recurringAddedBy")
+  expenseShares    ExpenseShare[]
+  blocks           Block[]
+}
+
+model Payment {
+  id        Int      @id @default(autoincrement())
+  from      Member   @relation("paymentFrom", fields: [fromId], references: [id])
+  fromId    Int
+  to        Member   @relation("paymentTo", fields: [toId], references: [id])
+  toId      Int
+  amount    Float
+  createdAt DateTime @default(now())
+}
+
+model CleaningTask {
+  id            Int            @id @default(autoincrement())
+  name          String
+  emoji         String
+  order         Int            @unique
+  cleaningWeeks CleaningWeek[]
+}
+
+model CleaningWeek {
+  id        Int          @id @default(autoincrement())
+  weekStart DateTime
+  task      CleaningTask @relation(fields: [taskId], references: [id])
+  taskId    Int
+  member    Member       @relation(fields: [memberId], references: [id])
+  memberId  Int
+  done      Boolean      @default(false)
+
+  @@unique([weekStart, taskId])
+}
+
+model Expense {
+  id            Int               @id @default(autoincrement())
+  title         String
+  category      String
+  amount        Float
+  paidBy        Member            @relation(fields: [paidById], references: [id])
+  paidById      Int
+  date          DateTime          @default(now())
+  createdAt     DateTime          @default(now())
+  recurring     RecurringExpense? @relation(fields: [recurringId], references: [id])
+  recurringId   Int?
+  shares        ExpenseShare[]
+}
+
+model ExpenseShare {
+  id        Int     @id @default(autoincrement())
+  expense   Expense @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+  expenseId Int
+  member    Member  @relation(fields: [memberId], references: [id])
+  memberId  Int
+  cents     Int
+
+  @@unique([expenseId, memberId])
+}
+
+model Block {
+  id        Int      @id @default(autoincrement())
+  member    Member   @relation(fields: [memberId], references: [id])
+  memberId  Int
+  startDate DateTime
+  endDate   DateTime
+  reason    String?
+  createdAt DateTime @default(now())
+}
+
+model RecurringExpense {
+  id        Int       @id @default(autoincrement())
+  title     String
+  category  String
+  amount    Float
+  paidBy    Member    @relation("recurringPaidBy", fields: [paidById], references: [id])
+  paidById  Int
+  addedBy   Member    @relation("recurringAddedBy", fields: [addedById], references: [id])
+  addedById Int
+  active    Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  expenses  Expense[]
+}
+
+model ShoppingItem {
+  id        Int      @id @default(autoincrement())
+  name      String
+  addedBy   Member   @relation(fields: [addedById], references: [id])
+  addedById Int
+  done      Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model Event {
+  id        Int      @id @default(autoincrement())
+  title     String
+  date      DateTime
+  note      String?
+  addedBy   Member   @relation(fields: [addedById], references: [id])
+  addedById Int
+  createdAt DateTime @default(now())
+}
