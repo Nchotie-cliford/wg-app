@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Baloo_2, Nunito } from "next/font/google";
 import "./globals.css";
+import { ServiceWorkerRegister } from "@/components/pwa/ServiceWorkerRegister";
 
 const baloo = Baloo_2({
   variable: "--font-baloo",
@@ -17,6 +18,7 @@ const nunito = Nunito({
 export const metadata: Metadata = {
   title: "WG App",
   description: "Cleaning, costs & chaos for our shared flat",
+  applicationName: "WG App",
   manifest: "/manifest.json",
   icons: {
     icon: [
@@ -25,10 +27,21 @@ export const metadata: Metadata = {
     ],
     apple: "/apple-touch-icon.png",
   },
+  appleWebApp: {
+    capable: true,
+    title: "WG App",
+    statusBarStyle: "default",
+  },
+  formatDetection: {
+    telephone: false,
+  },
 };
 
 export const viewport: Viewport = {
   themeColor: "#FF6B6B",
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
@@ -37,7 +50,10 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       lang="en"
       className={`${baloo.variable} ${nunito.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        {children}
+        <ServiceWorkerRegister />
+      </body>
     </html>
   );
 }

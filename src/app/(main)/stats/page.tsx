@@ -1,34 +1,35 @@
 import Link from "next/link";
-import { prisma } from "@/lib/prisma";
 import { euro } from "@/lib/balances";
 import { CATEGORIES, categoryColor } from "@/lib/categories";
 import { computeStreaks } from "@/lib/cleaning";
+import { requireMember } from "@/lib/session";
+import {
+  getMembers,
+  getCategoryTotals,
+  getDoneWeekCounts,
+} from "@/lib/data";
 import { Card } from "@/components/ui/Card";
 import { Avatar } from "@/components/ui/Avatar";
 import { EmptyState } from "@/components/ui/EmptyState";
 
 export default async function StatsPage() {
-  const [expenses, members, doneWeeks] = await Promise.all([
-    prisma.expense.findMany(),
-    prisma.member.findMany({ orderBy: { order: "asc" } }),
-    prisma.cleaningWeek.findMany({ where: { done: true } }),
+  await requireMember();
+  const [categoryMap, members, doneCounts] = await Promise.all([
+    getCategoryTotals(),
+    getMembers(),
+    getDoneWeekCounts(),
   ]);
 
   const categoryTotals = CATEGORIES.map((c) => ({
     ...c,
-    total: expenses
-      .filter((e) => e.category === c.name)
-      .reduce((sum, e) => sum + e.amount, 0),
+    total: categoryMap.get(c.name) ?? 0,
   }))
     .filter((c) => c.total > 0)
     .sort((a, b) => b.total - a.total);
   const maxTotal = Math.max(...categoryTotals.map((c) => c.total), 1);
 
   const championCounts = members
-    .map((m) => ({
-      member: m,
-      count: doneWeeks.filter((w) => w.memberId === m.id).length,
-    }))
+    .map((m) => ({ member: m, count: doneCounts.get(m.id) ?? 0 }))
     .sort((a, b) => b.count - a.count);
   const topCount = championCounts[0]?.count ?? 0;
 

@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { requireMember, SAFE_MEMBER_SELECT } from "@/lib/session";
 import {
   addShoppingItem,
   toggleShoppingItem,
@@ -11,8 +12,15 @@ import { Avatar } from "@/components/ui/Avatar";
 import { EmptyState } from "@/components/ui/EmptyState";
 
 export default async function ShoppingPage() {
+  await requireMember();
+
   const items = await prisma.shoppingItem.findMany({
-    include: { addedBy: true },
+    select: {
+      id: true,
+      name: true,
+      done: true,
+      addedBy: { select: SAFE_MEMBER_SELECT },
+    },
     orderBy: [{ done: "asc" }, { createdAt: "desc" }],
   });
   const doneCount = items.filter((i) => i.done).length;
@@ -28,7 +36,7 @@ export default async function ShoppingPage() {
 
       <Card className="p-4">
         <form action={addShoppingItem} className="flex gap-3">
-          <Input name="name" placeholder="We need..." required />
+          <Input name="name" placeholder="We need..." maxLength={120} required />
           <Button type="submit" variant="mint">
             Add
           </Button>

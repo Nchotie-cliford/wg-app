@@ -1,13 +1,9 @@
 import Link from "next/link";
-import { format } from "date-fns";
+import { format, subMonths, startOfMonth } from "date-fns";
 import { prisma } from "@/lib/prisma";
-import { requireMember } from "@/lib/session";
-import {
-  computeBalances,
-  computeSettlements,
-  groupByMonth,
-  euro,
-} from "@/lib/balances";
+import { requireMember, SAFE_MEMBER_SELECT } from "@/lib/session";
+import { getMembers, getBalances } from "@/lib/data";
+import { computeSettlements, groupByMonth, euro } from "@/lib/balances";
 import { confirmPayment, deletePayment } from "@/actions/payments";
 import { Card } from "@/components/ui/Card";
 import { Avatar } from "@/components/ui/Avatar";
@@ -18,17 +14,50 @@ import { MonthlyLedger } from "./MonthlyLedger";
 
 export default async function BalancesPage() {
   const me = await requireMember();
-  const [members, expenses, payments] = await Promise.all([
-    prisma.member.findMany({ orderBy: { order: "asc" } }),
-    prisma.expense.findMany({ include: { shares: true } }),
-    prisma.payment.findMany({
-      include: { from: true, to: true },
-      orderBy: { createdAt: "desc" },
-    }),
-  ]);
-  const { total, balances } = computeBalances(members, expenses, payments);
+  const members = await getMembers();
+
+  // Monthly history only needs a bounded window, not the whole ledger.
+  const historyFrom = startOfMonth(subMonths(new Date(), 6));
+
+  const [{ total, balances }, paymentsHistory, ledgerExpenses, ledgerPayments] =
+    await Promise.all([
+      getBalances(members),
+      prisma.payment.findMany({
+        select: {
+          id: true,
+          fromId: true,
+          amount: true,
+          createdAt: true,
+          from: { select: SAFE_MEMBER_SELECT },
+          to: { select: SAFE_MEMBER_SELECT },
+        },
+        orderBy: { createdAt: "desc" },
+        take: 100,
+      }),
+      prisma.expense.findMany({
+        where: { date: { gte: historyFrom } },
+        select: {
+          id: true,
+          amount: true,
+          paidById: true,
+          date: true,
+          shares: { select: { memberId: true, cents: true } },
+        },
+      }),
+      prisma.payment.findMany({
+        where: { createdAt: { gte: historyFrom } },
+        select: {
+          id: true,
+          fromId: true,
+          toId: true,
+          amount: true,
+          createdAt: true,
+        },
+      }),
+    ]);
+
   const settlements = computeSettlements(balances);
-  const months = groupByMonth(expenses, payments);
+  const months = groupByMonth(ledgerExpenses, ledgerPayments);
 
   return (
     <div className="flex flex-col gap-6">
@@ -113,13 +142,13 @@ export default async function BalancesPage() {
         )}
       </Card>
 
-      {payments.length > 0 && (
+      {paymentsHistory.length > 0 && (
         <Card className="p-4">
           <h2 className="mb-3 font-display text-lg font-bold">
             Payment history 🧾
           </h2>
           <div className="flex flex-col gap-2">
-            {payments.map((p) => (
+            {paymentsHistory.map((p) => (
               <div
                 key={p.id}
                 className="flex items-center gap-2 text-sm font-semibold"

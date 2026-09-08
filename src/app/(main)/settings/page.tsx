@@ -4,6 +4,7 @@ import { logout } from "@/actions/auth";
 import { toggleAway } from "@/actions/members";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
+import { InstallPrompt } from "@/components/pwa/InstallPrompt";
 import { MemberEditor } from "./MemberEditor";
 import { PinForm } from "./PinForm";
 
@@ -20,6 +21,8 @@ export default async function SettingsPage() {
       </div>
 
       <MemberEditor member={me} />
+
+      <InstallPrompt />
 
       <Card className="flex flex-col items-start gap-3 p-4">
         <h2 className="font-display text-lg font-bold">

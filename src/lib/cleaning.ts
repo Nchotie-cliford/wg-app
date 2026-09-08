@@ -1,12 +1,16 @@
-import type { Member } from "@prisma/client";
-import { addDays } from "date-fns";
+import "server-only";
+import { addDays, subWeeks } from "date-fns";
 import { prisma } from "./prisma";
+import { getCleaningTasks, getMembers } from "./data";
+import { SAFE_MEMBER_SELECT } from "./members";
+import type { SafeMember } from "./members";
 import { currentWeekStart, rotationIndex } from "./week";
 
 export async function getBlockedMemberIds(weekStart: Date) {
   const weekEnd = addDays(weekStart, 6);
   const blocks = await prisma.block.findMany({
     where: { startDate: { lte: weekEnd }, endDate: { gte: weekStart } },
+    select: { memberId: true },
   });
   return new Set(blocks.map((b) => b.memberId));
 }
@@ -14,17 +18,14 @@ export async function getBlockedMemberIds(weekStart: Date) {
 export async function getWeekAssignments(date = new Date()) {
   const weekStart = currentWeekStart(date);
   const [tasks, members, blockedIds, existing] = await Promise.all([
-    prisma.cleaningTask.findMany({
-      orderBy: { order: "asc" },
-      include: { subtasks: { orderBy: { order: "asc" } } },
-    }),
-    prisma.member.findMany({ orderBy: { order: "asc" } }),
+    getCleaningTasks(),
+    getMembers(),
     getBlockedMemberIds(weekStart),
     prisma.cleaningWeek.findMany({
       where: { weekStart },
       include: {
         task: { include: { subtasks: { orderBy: { order: "asc" } } } },
-        member: true,
+        member: { select: SAFE_MEMBER_SELECT },
         subtaskChecks: true,
       },
       orderBy: { task: { order: "asc" } },
@@ -84,7 +85,7 @@ export async function getWeekAssignments(date = new Date()) {
     where: { weekStart },
     include: {
       task: { include: { subtasks: { orderBy: { order: "asc" } } } },
-      member: true,
+      member: { select: SAFE_MEMBER_SELECT },
       subtaskChecks: true,
     },
     orderBy: { task: { order: "asc" } },
@@ -94,9 +95,11 @@ export async function getWeekAssignments(date = new Date()) {
 
 export async function getPastWeeks(count = 4, date = new Date()) {
   const thisWeekStart = currentWeekStart(date);
+  // Only look back `count` weeks (+1 buffer) instead of scanning all history.
+  const from = subWeeks(thisWeekStart, count + 1);
   const rows = await prisma.cleaningWeek.findMany({
-    where: { weekStart: { lt: thisWeekStart } },
-    include: { task: true, member: true },
+    where: { weekStart: { gte: from, lt: thisWeekStart } },
+    include: { task: true, member: { select: SAFE_MEMBER_SELECT } },
     orderBy: [{ weekStart: "desc" }, { task: { order: "asc" } }],
   });
   const byWeek = new Map<number, typeof rows>();
@@ -113,10 +116,11 @@ export async function getPastWeeks(count = 4, date = new Date()) {
     }));
 }
 
-export async function computeStreaks(members: Member[], date = new Date()) {
+export async function computeStreaks(members: SafeMember[], date = new Date()) {
   const thisWeekStart = currentWeekStart(date);
   const rows = await prisma.cleaningWeek.findMany({
     where: { weekStart: { lt: thisWeekStart } },
+    select: { weekStart: true, memberId: true, done: true },
     orderBy: { weekStart: "desc" },
   });
   const weekStarts = [...new Set(rows.map((r) => +r.weekStart))].sort(

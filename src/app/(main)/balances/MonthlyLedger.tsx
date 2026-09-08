@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { Member } from "@prisma/client";
+import type { SafeMember } from "@/lib/members";
 import { computeBalances, euro, type MonthGroup } from "@/lib/balances";
 import { Card } from "@/components/ui/Card";
 import { Avatar } from "@/components/ui/Avatar";
@@ -11,7 +11,7 @@ export function MonthlyLedger({
   members,
 }: {
   months: MonthGroup[];
-  members: Member[];
+  members: SafeMember[];
 }) {
   const [open, setOpen] = useState(false);
   if (months.length === 0) return null;

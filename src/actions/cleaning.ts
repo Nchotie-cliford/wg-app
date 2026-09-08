@@ -10,6 +10,9 @@ export async function toggleSubtask(formData: FormData) {
   const cleaningWeekId = Number(formData.get("cleaningWeekId"));
   const done = formData.get("done") === "true";
 
+  if (!Number.isInteger(id) || !Number.isInteger(cleaningWeekId)) return;
+
+  // Scoped to the session member: only the assignee can tick their own subtasks.
   const result = await prisma.subtaskCheck.updateMany({
     where: { id, cleaningWeekId, cleaningWeek: { memberId: me.id } },
     data: { done },

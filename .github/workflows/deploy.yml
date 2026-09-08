@@ -1,0 +1,100 @@
+name: Deploy
+
+# GitHub owns the production pipeline so the steps run in a guaranteed order:
+#   1. sync runtime secrets  GitHub -> Vercel
+#   2. apply DB migrations   (additive + backward-compatible; safe while the
+#      currently-live deployment keeps serving)
+#   3. build + deploy        (only reached if 1 and 2 succeeded)
+#
+# Vercel's automatic production deploy on push to main is disabled in
+# vercel.json (git.deploymentEnabled.main = false) so it can't race this.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Target (use 'preview' for a dry run)"
+        type: choice
+        options: [preview, production]
+        default: preview
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+  VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      # push to main => production; manual run => the chosen input
+      TARGET: ${{ github.event_name == 'push' && 'production' || inputs.environment }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Install Vercel CLI
+        run: npm i -g vercel@latest
+
+      # 1 ─ Sync runtime secrets from GitHub -> Vercel (GitHub is the source of truth)
+      - name: Sync environment variables to Vercel
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          SESSION_SECRET: ${{ secrets.SESSION_SECRET }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          NEXT_SERVER_ACTIONS_ENCRYPTION_KEY: ${{ secrets.NEXT_SERVER_ACTIONS_ENCRYPTION_KEY }}
+        run: |
+          set -euo pipefail
+          sync() {
+            local name="$1" value="$2"
+            if [ -z "$value" ]; then
+              echo "::error::Required GitHub secret '$name' is empty"; exit 1
+            fi
+            vercel env rm "$name" "$TARGET" --yes --token="$VERCEL_TOKEN" >/dev/null 2>&1 || true
+            printf '%s' "$value" | vercel env add "$name" "$TARGET" --sensitive --token="$VERCEL_TOKEN"
+          }
+          sync SESSION_SECRET                    "$SESSION_SECRET"
+          sync CRON_SECRET                       "$CRON_SECRET"
+          sync NEXT_SERVER_ACTIONS_ENCRYPTION_KEY "$NEXT_SERVER_ACTIONS_ENCRYPTION_KEY"
+
+      # 2 ─ Apply database migrations
+      - name: Apply database migrations
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          if [ -z "${DATABASE_URL:-}" ]; then
+            echo "::error::Required GitHub secret 'DATABASE_URL' is empty"; exit 1
+          fi
+          npx prisma migrate deploy
+
+      # 3 ─ Build + deploy via the Vercel CLI
+      - name: Pull Vercel project settings
+        run: vercel pull --yes --environment="$TARGET" --token="${{ secrets.VERCEL_TOKEN }}"
+
+      - name: Build
+        run: |
+          if [ "$TARGET" = "production" ]; then
+            vercel build --prod --token="${{ secrets.VERCEL_TOKEN }}"
+          else
+            vercel build --token="${{ secrets.VERCEL_TOKEN }}"
+          fi
+
+      - name: Deploy
+        run: |
+          if [ "$TARGET" = "production" ]; then
+            url=$(vercel deploy --prebuilt --prod --token="${{ secrets.VERCEL_TOKEN }}")
+          else
+            url=$(vercel deploy --prebuilt --token="${{ secrets.VERCEL_TOKEN }}")
+          fi
+          echo "Deployed **$TARGET**: $url" >> "$GITHUB_STEP_SUMMARY"

@@ -1,6 +1,6 @@
 import { format, startOfDay } from "date-fns";
 import { prisma } from "@/lib/prisma";
-import { requireMember } from "@/lib/session";
+import { requireMember, SAFE_MEMBER_SELECT } from "@/lib/session";
 import { deleteEvent } from "@/actions/events";
 import { deleteBlock } from "@/actions/blocks";
 import { Card } from "@/components/ui/Card";
@@ -12,15 +12,31 @@ import { AddBlockForm } from "./AddBlockForm";
 
 export default async function CalendarPage() {
   const me = await requireMember();
+  const today = startOfDay(new Date());
+
   const [events, blocks] = await Promise.all([
     prisma.event.findMany({
-      where: { date: { gte: startOfDay(new Date()) } },
-      include: { addedBy: true },
+      where: { date: { gte: today } },
+      select: {
+        id: true,
+        title: true,
+        date: true,
+        note: true,
+        addedById: true,
+        addedBy: { select: SAFE_MEMBER_SELECT },
+      },
       orderBy: { date: "asc" },
     }),
     prisma.block.findMany({
-      where: { endDate: { gte: startOfDay(new Date()) } },
-      include: { member: true },
+      where: { endDate: { gte: today } },
+      select: {
+        id: true,
+        memberId: true,
+        startDate: true,
+        endDate: true,
+        reason: true,
+        member: { select: SAFE_MEMBER_SELECT },
+      },
       orderBy: { startDate: "asc" },
     }),
   ]);
@@ -116,16 +132,14 @@ export default async function CalendarPage() {
                 )}
               </span>
               <Avatar member={e.addedBy} size="sm" />
-              <form action={deleteEvent}>
-                <input type="hidden" name="id" value={e.id} />
-                <button
-                  type="submit"
-                  className="rounded-full px-1 text-ink/30 transition-colors hover:text-coral"
-                  aria-label={`Delete ${e.title}`}
-                >
-                  ✕
-                </button>
-              </form>
+              {e.addedById === me.id && (
+                <ConfirmDeleteButton
+                  action={deleteEvent}
+                  hiddenName="id"
+                  hiddenValue={e.id}
+                  confirmMessage={`Delete "${e.title}"?`}
+                />
+              )}
             </Card>
           ))}
         </div>

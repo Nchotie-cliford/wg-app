@@ -11,7 +11,7 @@ export async function addBlock(
   const me = await requireMember();
   const startDate = new Date(String(formData.get("startDate") ?? ""));
   const endDate = new Date(String(formData.get("endDate") ?? ""));
-  const reason = String(formData.get("reason") ?? "").trim() || null;
+  const reason = String(formData.get("reason") ?? "").trim().slice(0, 200) || null;
 
   if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
     return { error: "Pick valid dates 📅" };
@@ -32,7 +32,11 @@ export async function addBlock(
 export async function deleteBlock(formData: FormData) {
   const me = await requireMember();
   const id = Number(formData.get("id"));
-  const block = await prisma.block.findUnique({ where: { id } });
+  if (!Number.isInteger(id)) return;
+  const block = await prisma.block.findUnique({
+    where: { id },
+    select: { memberId: true },
+  });
   if (!block || block.memberId !== me.id) return;
   await prisma.block.delete({ where: { id } });
   revalidatePath("/calendar");

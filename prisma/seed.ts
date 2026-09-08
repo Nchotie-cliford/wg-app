@@ -1,4 +1,5 @@
 import { PrismaClient } from "@prisma/client";
+import { hashPin } from "../src/lib/crypto";
 
 const prisma = new PrismaClient();
 
@@ -63,8 +64,8 @@ async function main() {
   for (const m of members) {
     await prisma.member.upsert({
       where: { order: m.order },
-      update: {},
-      create: m,
+      update: {}, // never clobber a PIN a real member has since set
+      create: { ...m, pin: await hashPin(m.pin) },
     });
   }
   for (const t of tasks) {
