@@ -1,79 +1,43 @@
 # Deployment
 
-Production deploys are driven by **`.github/workflows/deploy.yml`**, not by
-Vercel's Git integration (that is disabled for `main` in `vercel.json` so it
-can't race the workflow).
+Deploys run through **Vercel's Git integration** — push/merge to `main` and
+Vercel builds and deploys. The build command
+(`prisma generate && prisma migrate deploy && next build`) applies any pending
+database migrations before building, using the `DATABASE_URL` already set in the
+Vercel project.
 
-The workflow runs, in order, and stops on the first failure:
-
-1. **Sync secrets** GitHub → Vercel (`vercel env add`)
-2. **`prisma migrate deploy`** against the production database
-3. **`vercel build` + `vercel deploy --prebuilt --prod`**
-
-If step 1 or 2 fails, step 3 never runs and the previously-live deployment
-keeps serving. There is no traffic split / canary: the schema migration is
-**additive and backward-compatible** (new `Member` columns + indexes only), so
-the old code keeps working against the migrated database until the new code is
-deployed. Rollback = re-promote the previous deployment in Vercel.
+The `20260902120000_security_and_perf` migration is **additive and
+backward-compatible** (new `Member` columns + indexes only), so there is no
+canary/blue-green step: the currently-live code keeps working against the
+migrated schema until the new build is promoted. Rollback = re-promote the
+previous deployment in Vercel.
 
 ## One-time setup
 
-### 1. Get Vercel identifiers (needs Vercel access once)
+Add these in **Vercel → project → Settings → Environment Variables**, scope
+**Production** (also add to **Preview** if you rely on PR preview deployments):
 
-Someone with access to the Vercel project runs, from a local clone:
-
-```bash
-npx vercel link        # writes .vercel/project.json
-cat .vercel/project.json   # -> "orgId" and "projectId"
-```
-
-and creates a token at **Vercel → Account Settings → Tokens** (scope: the team
-that owns this project).
-
-### 2. Add GitHub repository secrets
-
-**Settings → Secrets and variables → Actions → New repository secret**
-
-| Secret | Value |
+| Variable | Value |
 |---|---|
-| `VERCEL_TOKEN` | the token from step 1 |
-| `VERCEL_ORG_ID` | `orgId` from `project.json` |
-| `VERCEL_PROJECT_ID` | `projectId` from `project.json` |
-| `SESSION_SECRET` | `openssl rand -base64 32` |
-| `CRON_SECRET` | `openssl rand -base64 32` |
+| `SESSION_SECRET` | `openssl rand -base64 32` — app refuses to boot in production without it |
+| `CRON_SECRET` | `openssl rand -base64 32` — required by `/api/cron/recurring` |
 | `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY` | `openssl rand -base64 32` |
-| `DATABASE_URL` | a **direct / unpooled** Postgres URL (used only for migrations) |
 
-> `DATABASE_URL` for the *running app* is already configured in the Vercel
-> project. The `DATABASE_URL` secret here is only for `prisma migrate deploy`
-> and can point at the same database (use the unpooled host if your Vercel one
-> is a pooler).
+`DATABASE_URL` is already configured. It must be reachable for DDL during the
+build; if it points at a transaction-mode pooler that rejects `prisma migrate
+deploy` (e.g. Supabase :6543), either switch it to the direct/session URL or run
+`npx prisma migrate deploy` once by hand against a direct URL and drop
+`prisma migrate deploy` from the build command.
 
-### 3. Dry run before touching production
+## Go live
 
-Actions tab → **Deploy** → **Run workflow** → `environment: preview`.
+1. Add the three variables above in Vercel.
+2. Merge to `main`. Vercel builds → runs the migration → deploys.
+3. Everyone is signed out once (the session cookie format changed) and logs
+   back in with their existing PIN.
 
-This syncs the secrets to Vercel's **Preview** scope, applies the migration,
-and gives you a preview URL. Verify on that URL:
+## After go-live
 
-- the app loads (proves `SESSION_SECRET` is wired — otherwise every route 500s)
-- you can pick a flatmate and log in with the existing PIN (proves the
-  migration ran and the new auth path works)
-- `curl -s -o /dev/null -w '%{http_code}' https://<preview>/api/cron/recurring`
-  returns `401` (proves `CRON_SECRET` is required)
-
-### 4. Go live
-
-Merge to `main`. The workflow runs the same steps against **production** and
-deploys. Everyone is signed out once (the session cookie format changed) and
-logs back in with their existing PIN.
-
-## Notes
-
-- Vercel still builds **PR previews** automatically. Those previews won't have
-  the new secrets until you've done at least one `environment: preview` run
-  (which populates the Preview scope).
-- The daily recurring-bill cron (`vercel.json` → `/api/cron/recurring`) needs
-  `CRON_SECRET` set in the Vercel **Production** scope — the `main` deploy does
-  that.
-- To rotate a secret: update the GitHub secret, re-run the workflow.
+- Confirm the daily cron appears under **Settings → Cron Jobs**.
+- For lower latency, make the runtime `DATABASE_URL` a **pooled** endpoint
+  (Neon `-pooler`, Accelerate, etc.).
