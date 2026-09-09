@@ -1,4 +1,5 @@
-import type { Member, Payment } from "@prisma/client";
+import type { Payment } from "@prisma/client";
+import type { SafeMember } from "./members";
 
 export type ExpenseWithShares = {
   id: number;
@@ -8,11 +9,11 @@ export type ExpenseWithShares = {
   shares: { memberId: number; cents: number }[];
 };
 
-export type Balance = { member: Member; paid: number; net: number };
-export type Settlement = { from: Member; to: Member; amount: number };
+export type Balance = { member: SafeMember; paid: number; net: number };
+export type Settlement = { from: SafeMember; to: SafeMember; amount: number };
 
 export function computeBalances(
-  members: Member[],
+  members: SafeMember[],
   expenses: ExpenseWithShares[],
   payments: Payment[] = []
 ) {

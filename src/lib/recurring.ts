@@ -1,3 +1,4 @@
+import "server-only";
 import { startOfMonth, endOfMonth } from "date-fns";
 import { prisma } from "./prisma";
 import { splitEvenCents } from "./money";

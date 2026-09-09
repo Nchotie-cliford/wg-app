@@ -1,11 +1,13 @@
-import { prisma } from "@/lib/prisma";
+import { getMembers } from "@/lib/data";
 import { MemberPicker } from "./MemberPicker";
 
+// Rendered per request: the member list must reflect the live DB (e.g. a
+// newly-seeded flatmate) without needing a redeploy, and the build must not
+// depend on the database being reachable.
+export const dynamic = "force-dynamic";
+
 export default async function WhoAmIPage() {
-  const members = await prisma.member.findMany({
-    orderBy: { order: "asc" },
-    select: { id: true, name: true, emoji: true, colorHex: true },
-  });
+  const members = await getMembers();
 
   return (
     <main className="flex min-h-dvh flex-col items-center justify-center gap-8 p-6">

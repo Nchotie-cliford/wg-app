@@ -1,15 +1,14 @@
 import Link from "next/link";
-import { requireMember } from "@/lib/session";
-import { Avatar } from "@/components/ui/Avatar";
+import { Suspense } from "react";
 import { BottomNav } from "@/components/nav/BottomNav";
+import { InstallPrompt } from "@/components/pwa/InstallPrompt";
+import { UserChip, UserChipFallback } from "./UserChip";
 
-export default async function MainLayout({
+export default function MainLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const me = await requireMember();
-
   return (
     <div className="mx-auto flex w-full max-w-md flex-1 flex-col">
       <header className="flex items-center justify-between p-4">
@@ -17,15 +16,14 @@ export default async function MainLayout({
           <span className="text-2xl">🏠</span>
           <span className="font-display text-xl font-extrabold">WG App</span>
         </Link>
-        <Link
-          href="/settings"
-          className="flex items-center gap-2 rounded-full border-2 border-ink bg-white py-1 pl-3 pr-1 shadow-sticker-sm transition-all hover:-translate-y-0.5 active:scale-95"
-        >
-          <span className="font-display text-sm font-bold">{me.name}</span>
-          <Avatar member={me} size="sm" />
-        </Link>
+        <Suspense fallback={<UserChipFallback />}>
+          <UserChip />
+        </Suspense>
       </header>
-      <main className="flex-1 px-4 pb-28">{children}</main>
+      <main className="flex-1 px-4 pb-28">
+        <InstallPrompt variant="banner" />
+        {children}
+      </main>
       <BottomNav />
     </div>
   );

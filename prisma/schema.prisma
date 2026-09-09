@@ -4,23 +4,35 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
+  // On serverless, point this at a POOLED endpoint (PgBouncer / Neon `-pooler` /
+  // Prisma Accelerate). Direct connections make every cold function pay a full
+  // TLS + Postgres handshake and can exhaust the connection limit. See .env.example.
+  url = env("DATABASE_URL")
 }
 
 model Member {
-  id            Int            @id @default(autoincrement())
-  name          String
-  emoji         String
-  colorHex      String
-  pin           String         @default("0000")
-  isAway        Boolean        @default(false)
-  order         Int            @unique
-  cleaningWeeks CleaningWeek[]
-  expenses      Expense[]
-  shoppingItems ShoppingItem[]
-  events        Event[]
-  paymentsSent     Payment[] @relation("paymentFrom")
-  paymentsReceived Payment[] @relation("paymentTo")
+  id       Int     @id @default(autoincrement())
+  name     String
+  emoji    String
+  colorHex String
+  // Stores a scrypt hash ("scrypt:<salt>:<hash>"), never a plaintext PIN.
+  // Legacy plaintext values are upgraded transparently on next successful login.
+  pin      String  @default("0000")
+  isAway   Boolean @default(false)
+  order    Int     @unique
+
+  // --- auth / anti-bruteforce ---
+  failedPinAttempts Int       @default(0)
+  pinLockedUntil    DateTime?
+  // Bumped to invalidate every existing session for this member (e.g. on PIN change).
+  sessionVersion    Int       @default(0)
+
+  cleaningWeeks    CleaningWeek[]
+  expenses         Expense[]
+  shoppingItems    ShoppingItem[]
+  events           Event[]
+  paymentsSent     Payment[]         @relation("paymentFrom")
+  paymentsReceived Payment[]         @relation("paymentTo")
   recurringPaidBy  RecurringExpense[] @relation("recurringPaidBy")
   recurringAddedBy RecurringExpense[] @relation("recurringAddedBy")
   expenseShares    ExpenseShare[]
@@ -35,6 +47,10 @@ model Payment {
   toId      Int
   amount    Float
   createdAt DateTime @default(now())
+
+  @@index([fromId])
+  @@index([toId])
+  @@index([createdAt])
 }
 
 model CleaningTask {
@@ -47,25 +63,30 @@ model CleaningTask {
 }
 
 model CleaningSubtask {
-  id     Int    @id @default(autoincrement())
+  id     Int          @id @default(autoincrement())
   task   CleaningTask @relation(fields: [taskId], references: [id])
   taskId Int
   label  String
   order  Int
   checks SubtaskCheck[]
+
+  @@index([taskId])
 }
 
 model CleaningWeek {
-  id        Int          @id @default(autoincrement())
-  weekStart DateTime
-  task      CleaningTask @relation(fields: [taskId], references: [id])
-  taskId    Int
-  member    Member       @relation(fields: [memberId], references: [id])
-  memberId  Int
-  done      Boolean      @default(false)
+  id            Int          @id @default(autoincrement())
+  weekStart     DateTime
+  task          CleaningTask @relation(fields: [taskId], references: [id])
+  taskId        Int
+  member        Member       @relation(fields: [memberId], references: [id])
+  memberId      Int
+  done          Boolean      @default(false)
   subtaskChecks SubtaskCheck[]
 
   @@unique([weekStart, taskId])
+  @@index([weekStart])
+  @@index([memberId])
+  @@index([taskId])
 }
 
 model SubtaskCheck {
@@ -77,20 +98,27 @@ model SubtaskCheck {
   done           Boolean         @default(false)
 
   @@unique([cleaningWeekId, subtaskId])
+  @@index([cleaningWeekId])
+  @@index([subtaskId])
 }
 
 model Expense {
-  id            Int               @id @default(autoincrement())
-  title         String
-  category      String
-  amount        Float
-  paidBy        Member            @relation(fields: [paidById], references: [id])
-  paidById      Int
-  date          DateTime          @default(now())
-  createdAt     DateTime          @default(now())
-  recurring     RecurringExpense? @relation(fields: [recurringId], references: [id])
-  recurringId   Int?
-  shares        ExpenseShare[]
+  id          Int               @id @default(autoincrement())
+  title       String
+  category    String
+  amount      Float
+  paidBy      Member            @relation(fields: [paidById], references: [id])
+  paidById    Int
+  date        DateTime          @default(now())
+  createdAt   DateTime          @default(now())
+  recurring   RecurringExpense? @relation(fields: [recurringId], references: [id])
+  recurringId Int?
+  shares      ExpenseShare[]
+
+  @@index([date])
+  @@index([paidById])
+  @@index([category])
+  @@index([recurringId, date])
 }
 
 model ExpenseShare {
@@ -102,6 +130,7 @@ model ExpenseShare {
   cents     Int
 
   @@unique([expenseId, memberId])
+  @@index([memberId])
 }
 
 model Block {
@@ -112,6 +141,9 @@ model Block {
   endDate   DateTime
   reason    String?
   createdAt DateTime @default(now())
+
+  @@index([memberId])
+  @@index([startDate, endDate])
 }
 
 model RecurringExpense {
@@ -126,6 +158,10 @@ model RecurringExpense {
   active    Boolean   @default(true)
   createdAt DateTime  @default(now())
   expenses  Expense[]
+
+  @@index([active])
+  @@index([paidById])
+  @@index([addedById])
 }
 
 model ShoppingItem {
@@ -135,6 +171,9 @@ model ShoppingItem {
   addedById Int
   done      Boolean  @default(false)
   createdAt DateTime @default(now())
+
+  @@index([addedById])
+  @@index([done, createdAt])
 }
 
 model Event {
@@ -145,4 +184,7 @@ model Event {
   addedBy   Member   @relation(fields: [addedById], references: [id])
   addedById Int
   createdAt DateTime @default(now())
+
+  @@index([addedById])
+  @@index([date])
 }

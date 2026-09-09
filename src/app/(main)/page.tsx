@@ -2,40 +2,32 @@ import Link from "next/link";
 import { format, startOfDay } from "date-fns";
 import { prisma } from "@/lib/prisma";
 import { requireMember } from "@/lib/session";
+import { getMembers, getBalances } from "@/lib/data";
 import { getWeekAssignments, getPastWeeks } from "@/lib/cleaning";
-import { computeBalances, euro } from "@/lib/balances";
+import { euro } from "@/lib/balances";
 import { Card } from "@/components/ui/Card";
 import { Avatar } from "@/components/ui/Avatar";
 
 export default async function DashboardPage() {
   const me = await requireMember();
-  const [
-    { assignments },
-    members,
-    expenses,
-    payments,
-    openItems,
-    nextEvent,
-    [lastWeek],
-  ] = await Promise.all([
-    getWeekAssignments(),
-    prisma.member.findMany({ orderBy: { order: "asc" } }),
-    prisma.expense.findMany({ include: { shares: true } }),
-    prisma.payment.findMany(),
-    prisma.shoppingItem.count({ where: { done: false } }),
-    prisma.event.findFirst({
-      where: { date: { gte: startOfDay(new Date()) } },
-      orderBy: { date: "asc" },
-    }),
-    getPastWeeks(1),
-  ]);
+  const members = await getMembers();
+
+  const [{ assignments }, { balances }, openItems, nextEvent, [lastWeek]] =
+    await Promise.all([
+      getWeekAssignments(),
+      getBalances(members),
+      prisma.shoppingItem.count({ where: { done: false } }),
+      prisma.event.findFirst({
+        where: { date: { gte: startOfDay(new Date()) } },
+        orderBy: { date: "asc" },
+        select: { date: true, title: true },
+      }),
+      getPastWeeks(1),
+    ]);
 
   const myTasks = assignments.filter((a) => a.memberId === me.id);
   const missedLastWeek = lastWeek?.rows.filter((r) => !r.done) ?? [];
-  const myBalance =
-    computeBalances(members, expenses, payments).balances.find(
-      (b) => b.member.id === me.id
-    )?.net ?? 0;
+  const myBalance = balances.find((b) => b.member.id === me.id)?.net ?? 0;
 
   return (
     <div className="flex flex-col gap-5">

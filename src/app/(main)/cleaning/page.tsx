@@ -4,8 +4,8 @@ import {
   getPastWeeks,
   getBlockedMemberIds,
 } from "@/lib/cleaning";
+import { getCleaningTasks, getMembers } from "@/lib/data";
 import { weekLabel, rotationIndex, currentWeekStart } from "@/lib/week";
-import { prisma } from "@/lib/prisma";
 import { requireMember } from "@/lib/session";
 import { Avatar } from "@/components/ui/Avatar";
 import { Card } from "@/components/ui/Card";
@@ -19,8 +19,8 @@ export default async function CleaningPage() {
 
   const nextWeekStart = currentWeekStart(addWeeks(new Date(), 1));
   const [tasks, members, pastWeeks, nextBlockedIds] = await Promise.all([
-    prisma.cleaningTask.findMany({ orderBy: { order: "asc" } }),
-    prisma.member.findMany({ orderBy: { order: "asc" } }),
+    getCleaningTasks(),
+    getMembers(),
     getPastWeeks(4),
     getBlockedMemberIds(nextWeekStart),
   ]);
