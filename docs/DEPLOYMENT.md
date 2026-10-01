@@ -60,7 +60,7 @@ that has `DATABASE_URL`:
 
 ```
 npm run reset-pin -- Cliford     # or: npm run reset-pin -- 0   (member order)
-npm run reset-pin -- --all       # everyone at once (fresh start)
+npm run reset-pin -- all         # everyone at once (fresh start)
 ```
 
 Go through `npm run` rather than `npx tsx` directly — the npm script loads `.env`.

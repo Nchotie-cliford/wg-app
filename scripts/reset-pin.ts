@@ -3,7 +3,7 @@
  *
  *   npm run reset-pin -- Cliford
  *   npm run reset-pin -- 0                  # by member order
- *   npm run reset-pin -- --all              # everyone (fresh start)
+ *   npm run reset-pin -- all                # everyone (fresh start)
  *
  * Go through npm, not `npx tsx` directly: the script needs DATABASE_URL and the
  * npm script passes --env-file-if-exists=.env to load it (tsx does not read .env
@@ -28,14 +28,18 @@ async function main() {
     process.exit(1);
   }
 
-  const who = process.argv[2];
+  // PowerShell strips a bare `--`, so `npm run reset-pin -- --all` reaches npm
+  // as `--all`, which npm keeps as its own config (npm_config_all) instead of
+  // forwarding. Accept that, and a dash-free `all`, so every shell works.
+  const who =
+    process.argv[2] ?? (process.env.npm_config_all === "true" ? "all" : undefined);
   if (!who) {
-    console.error("Usage: npm run reset-pin -- <name|order|--all>");
+    console.error("Usage: npm run reset-pin -- <name|order|all>");
     process.exit(1);
   }
 
   let members;
-  if (who === "--all") {
+  if (who === "all" || who === "--all") {
     // Fresh start for the whole flat: everyone gets a temp PIN and picks their
     // own on next login. Only PIN/session columns change — no data is touched.
     members = await prisma.member.findMany({ orderBy: { order: "asc" } });
