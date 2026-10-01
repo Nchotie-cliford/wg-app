@@ -28,6 +28,32 @@ export const getMembers = unstable_cache(
   { tags: [MEMBERS_TAG], revalidate: 60 }
 );
 
+/**
+ * Members waiting on a PIN reset they asked for from the login screen.
+ * Deliberately NOT cached: a flatmate standing next to the person who is locked
+ * out should see the request on the next render, not up to 60s later.
+ */
+export const getPendingPinResets = cache(
+  async (): Promise<{ id: number; name: string; emoji: string; colorHex: string; requestedAt: Date }[]> => {
+    const rows = await prisma.member.findMany({
+      where: { pinResetRequestedAt: { not: null } },
+      orderBy: { pinResetRequestedAt: "asc" },
+      select: {
+        id: true,
+        name: true,
+        emoji: true,
+        colorHex: true,
+        pinResetRequestedAt: true,
+      },
+    });
+    return rows.map(({ pinResetRequestedAt, ...m }) => ({
+      ...m,
+      // Non-null by the `where` above; narrowed here so callers get a plain Date.
+      requestedAt: pinResetRequestedAt as Date,
+    }));
+  }
+);
+
 export type CleaningTaskWithSubtasks = {
   id: number;
   name: string;

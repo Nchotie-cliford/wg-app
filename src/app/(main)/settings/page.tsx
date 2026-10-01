@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { requireMember } from "@/lib/session";
+import { getMembers, getPendingPinResets } from "@/lib/data";
 import { logout } from "@/actions/auth";
 import { toggleAway } from "@/actions/members";
 import { Card } from "@/components/ui/Card";
@@ -7,9 +8,17 @@ import { Button } from "@/components/ui/Button";
 import { InstallPrompt } from "@/components/pwa/InstallPrompt";
 import { MemberEditor } from "./MemberEditor";
 import { PinForm } from "./PinForm";
+import { FlatmatePinReset } from "./FlatmatePinReset";
 
 export default async function SettingsPage() {
   const me = await requireMember();
+  const [allMembers, pendingResets] = await Promise.all([
+    getMembers(),
+    getPendingPinResets(),
+  ]);
+  const others = allMembers.filter((m) => m.id !== me.id);
+  // Your own request is not yours to approve — you're already in.
+  const pending = pendingResets.filter((r) => r.id !== me.id);
 
   return (
     <div className="flex flex-col gap-6">
@@ -30,6 +39,8 @@ export default async function SettingsPage() {
         </h2>
         <PinForm />
       </Card>
+
+      <FlatmatePinReset others={others} pending={pending} />
 
       <Card className="flex items-center gap-3 p-4">
         <span className="flex-1">

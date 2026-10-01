@@ -11,6 +11,9 @@ export { MEMBER_COOKIE, SAFE_MEMBER_SELECT };
 
 const SESSION_MAX_AGE = 60 * 60 * 24 * 90; // 90 days
 
+/** Route Handler that clears an invalidated cookie, then redirects to /whoami. */
+const STALE_SESSION_PATH = "/api/session/expire";
+
 function cookieOptions() {
   return {
     httpOnly: true,
@@ -47,22 +50,46 @@ export const getSession = cache(async (): Promise<SessionPayload | null> => {
 });
 
 /**
- * The Data Access Layer entry point. Verifies the signed cookie *and* that the
- * session has not been invalidated server-side (sessionVersion), then returns a
- * safe projection of the member. Redirects to /whoami when unauthenticated.
+ * Verifies the signed cookie *and* that the session has not been invalidated
+ * server-side (sessionVersion). Redirects to /whoami when unauthenticated.
  * Memoized per request so layout + page + leaf components share one DB read.
+ *
+ * Prefer {@link requireMember}: this variant does NOT enforce a pending forced
+ * PIN change, and exists for /set-pin, which would otherwise redirect to itself.
+ */
+export const loadMember = cache(
+  async (): Promise<SafeMember & { mustChangePin: boolean }> => {
+    const session = await getSession();
+    if (!session) redirect("/whoami");
+
+    const member = await prisma.member.findUnique({
+      where: { id: session.m },
+      select: {
+        ...SAFE_MEMBER_SELECT,
+        sessionVersion: true,
+        mustChangePin: true,
+      },
+    });
+    // Not /whoami: the cookie is validly signed, so `proxy.ts` would bounce it
+    // straight back here and loop. This route clears the cookie first.
+    if (!member || member.sessionVersion !== session.v) {
+      redirect(STALE_SESSION_PATH);
+    }
+
+    const { sessionVersion: _sessionVersion, ...rest } = member;
+    void _sessionVersion;
+    return rest;
+  }
+);
+
+/**
+ * The Data Access Layer entry point. As {@link loadMember}, but a member whose
+ * PIN was reset by a flatmate is held at /set-pin until they choose a new one —
+ * enforced here rather than in `proxy.ts` so it cannot be skipped by any page,
+ * Server Action or route that reads the session.
  */
 export const requireMember = cache(async (): Promise<SafeMember> => {
-  const session = await getSession();
-  if (!session) redirect("/whoami");
-
-  const member = await prisma.member.findUnique({
-    where: { id: session.m },
-    select: { ...SAFE_MEMBER_SELECT, sessionVersion: true },
-  });
-  if (!member || member.sessionVersion !== session.v) redirect("/whoami");
-
-  const { sessionVersion: _sessionVersion, ...safe } = member;
-  void _sessionVersion;
+  const { mustChangePin, ...safe } = await loadMember();
+  if (mustChangePin) redirect("/set-pin");
   return safe;
 });

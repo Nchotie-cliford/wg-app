@@ -35,6 +35,7 @@ export async function pickMember(
       failedPinAttempts: true,
       pinLockedUntil: true,
       sessionVersion: true,
+      mustChangePin: true,
     },
   });
 
@@ -72,12 +73,43 @@ export async function pickMember(
     data: {
       failedPinAttempts: 0,
       pinLockedUntil: null,
+      // They got in, so any "I'm locked out" request is moot.
+      pinResetRequestedAt: null,
       ...(needsUpgrade ? { pin: await hashPin(pin) } : {}),
     },
   });
 
   await createSession({ id: member.id, sessionVersion: member.sessionVersion });
-  redirect("/");
+  // A PIN a flatmate reset only gets you as far as choosing a real one.
+  redirect(member.mustChangePin ? "/set-pin" : "/");
+}
+
+/**
+ * Raised from the login screen by someone who cannot get in — the one action
+ * here that needs no session, because by definition they have none. It only
+ * raises a flag: a logged-in flatmate still has to approve it in Settings, so
+ * this grants no access on its own and the worst a stranger can do is put a
+ * notice in the flat's Settings.
+ */
+export async function requestPinReset(
+  _prev: { ok?: boolean; error?: string },
+  formData: FormData
+): Promise<{ ok?: boolean; error?: string }> {
+  const memberId = Number(formData.get("memberId"));
+  if (!Number.isInteger(memberId) || memberId <= 0) {
+    return { error: "Pick a flatmate first 👀" };
+  }
+
+  // updateMany, not update: a bad id must not throw (and so confirm which ids
+  // exist). Already-pending requests keep their original timestamp, so spamming
+  // the button cannot push the request down a list ordered by age.
+  await prisma.member.updateMany({
+    where: { id: memberId, pinResetRequestedAt: null },
+    data: { pinResetRequestedAt: new Date() },
+  });
+
+  // Settings renders the pending list per request, so nothing to revalidate.
+  return { ok: true };
 }
 
 export async function logout() {

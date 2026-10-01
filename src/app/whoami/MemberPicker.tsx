@@ -1,14 +1,57 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import { pickMember } from "@/actions/auth";
+import { pickMember, requestPinReset } from "@/actions/auth";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Card } from "@/components/ui/Card";
 import type { PickableMember } from "@/lib/characters";
 
+/**
+ * "I can't get in" — raises a request a logged-in flatmate approves in Settings.
+ * Its own <form>, kept outside the login form: nesting forms is invalid HTML and
+ * the browser would submit the outer one.
+ */
+function ForgotPinPanel({ member }: { member: PickableMember }) {
+  const [state, formAction, pending] = useActionState(requestPinReset, {});
+
+  if (state.ok) {
+    return (
+      <p className="mt-3 animate-pop-in rounded-blob border-2 border-ink bg-mint/50 p-3 text-center text-sm font-semibold">
+        Asked! 📣 Any flatmate can now open <span className="font-bold">Settings</span>{" "}
+        and reset your PIN — they&apos;ll read you a temp PIN to log in with.
+      </p>
+    );
+  }
+
+  return (
+    <form
+      action={formAction}
+      className="mt-3 animate-pop-in rounded-blob border-2 border-ink bg-sunny/40 p-3 text-center"
+    >
+      <input type="hidden" name="memberId" value={member.id} />
+      <p className="mb-3 text-sm font-semibold">
+        PINs are stored scrambled, so nobody can look yours up — not even the
+        app. A flatmate can reset it for you.
+      </p>
+      <Button
+        type="submit"
+        variant="white"
+        className="px-4 py-2 text-sm"
+        disabled={pending}
+      >
+        {pending ? "Asking..." : "Ask a flatmate to reset it"}
+      </Button>
+      {state.error && (
+        <p className="mt-2 animate-wiggle font-bold text-coral">{state.error}</p>
+      )}
+    </form>
+  );
+}
+
 export function MemberPicker({ members }: { members: PickableMember[] }) {
   const [selected, setSelected] = useState<PickableMember | null>(null);
+  const [forgot, setForgot] = useState(false);
   const [state, formAction, pending] = useActionState(pickMember, {});
 
   if (selected) {
@@ -55,7 +98,17 @@ export function MemberPicker({ members }: { members: PickableMember[] }) {
           >
             ← Not you? Pick someone else
           </button>
+          <button
+            type="button"
+            onClick={() => setForgot((v) => !v)}
+            className="font-display text-sm font-bold text-ink/50 underline"
+          >
+            Forgot your PIN? 🙈
+          </button>
         </form>
+        {forgot && (
+          <ForgotPinPanel member={selected} />
+        )}
       </Card>
     );
   }

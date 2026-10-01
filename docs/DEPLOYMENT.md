@@ -41,3 +41,26 @@ deploy` (e.g. Supabase :6543), either switch it to the direct/session URL or run
 - Confirm the daily cron appears under **Settings → Cron Jobs**.
 - For lower latency, make the runtime `DATABASE_URL` a **pooled** endpoint
   (Neon `-pooler`, Accelerate, etc.).
+
+## Forgotten PINs
+
+PINs are scrypt hashes — there is no way to read one back, for anyone. Recovery
+is flatmate-to-flatmate, which works because we all live here:
+
+1. Any logged-in member opens **Settings → "Flatmate forgot their PIN?"** and
+   resets the person who is locked out.
+2. The app shows a one-time 6-digit temp PIN. It is shown **once** and is not
+   recoverable — read it out there and then.
+3. The reset signs that member out of every device and clears any lockout.
+4. They log in with the temp PIN and land on `/set-pin`, which is the only page
+   they can reach until they choose a new PIN.
+
+If **nobody** can log in, there is no flatmate to ask, so reset from a machine
+that has `DATABASE_URL`:
+
+```
+npm run reset-pin -- Cliford     # or: npm run reset-pin -- 0   (member order)
+npm run reset-pin -- --all       # everyone at once (fresh start)
+```
+
+Go through `npm run` rather than `npx tsx` directly — the npm script loads `.env`.

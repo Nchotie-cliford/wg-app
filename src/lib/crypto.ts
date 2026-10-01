@@ -4,6 +4,7 @@
 import {
   createHmac,
   randomBytes,
+  randomInt,
   scrypt as scryptCb,
   timingSafeEqual,
 } from "node:crypto";
@@ -69,6 +70,16 @@ export async function verifyPin(
   const actual = await scrypt(pin.normalize(), Buffer.from(saltHex, "hex"), PIN_KEYLEN);
   const ok = expected.length === actual.length && timingSafeEqual(expected, actual);
   return { ok, needsUpgrade: false };
+}
+
+/**
+ * A random 6-digit PIN for a flatmate-initiated reset. Uses `randomInt` (CSPRNG,
+ * rejection-sampled so every value is equally likely) rather than `Math.random`
+ * — this value is a password until the owner replaces it. 6 digits, not 4, so
+ * the handful of guesses the lockout allows are not worth taking.
+ */
+export function generateTempPin(): string {
+  return String(randomInt(0, 1_000_000)).padStart(6, "0");
 }
 
 function safeEqual(a: string, b: string): boolean {

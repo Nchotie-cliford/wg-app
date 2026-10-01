@@ -26,6 +26,13 @@ model Member {
   pinLockedUntil    DateTime?
   // Bumped to invalidate every existing session for this member (e.g. on PIN change).
   sessionVersion    Int       @default(0)
+  // Set when a flatmate reset this PIN: the temp PIN logs in, but the only
+  // reachable page is /set-pin until a new PIN is chosen.
+  mustChangePin     Boolean   @default(false)
+  // Set from the login screen by someone who can't get in; any logged-in
+  // flatmate sees the request in Settings and approves it. Cleared on approve,
+  // dismiss, or a successful login (they remembered it after all).
+  pinResetRequestedAt DateTime?
 
   cleaningWeeks    CleaningWeek[]
   expenses         Expense[]
