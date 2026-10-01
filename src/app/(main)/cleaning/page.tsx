@@ -5,7 +5,12 @@ import {
   getBlockedMemberIds,
 } from "@/lib/cleaning";
 import { getCleaningTasks, getMembers } from "@/lib/data";
-import { weekLabel, rotationIndex, currentWeekStart } from "@/lib/week";
+import {
+  weekLabel,
+  rotationIndex,
+  currentWeekStart,
+  rotationAssignee,
+} from "@/lib/week";
 import { requireMember } from "@/lib/session";
 import { Avatar } from "@/components/ui/Avatar";
 import { Card } from "@/components/ui/Card";
@@ -90,7 +95,7 @@ export default async function CleaningPage() {
         <h2 className="mb-3 font-display text-lg font-bold">Next week 🔮</h2>
         <div className="flex flex-col gap-2">
           {tasks.map((task) => {
-            const member = nextPool[(nextRot + task.order) % nextPool.length];
+            const member = rotationAssignee(nextPool, nextRot, task.order);
             return (
               <div
                 key={task.id}
