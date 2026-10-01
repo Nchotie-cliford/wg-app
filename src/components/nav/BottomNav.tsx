@@ -8,6 +8,7 @@ import {
   PiggyBank,
   ShoppingBasket,
   CalendarDays,
+  ScrollText,
 } from "lucide-react";
 
 const tabs = [
@@ -16,6 +17,7 @@ const tabs = [
   { href: "/expenses", label: "Costs", icon: PiggyBank },
   { href: "/shopping", label: "Shopping", icon: ShoppingBasket },
   { href: "/calendar", label: "Calendar", icon: CalendarDays },
+  { href: "/rules", label: "Rules", icon: ScrollText },
 ] as const;
 
 export function BottomNav() {
@@ -31,7 +33,7 @@ export function BottomNav() {
             <Link
               key={href}
               href={href}
-              className={`flex flex-col items-center gap-0.5 rounded-full px-3 py-1.5 transition-all active:scale-90 ${
+              className={`flex flex-col items-center gap-0.5 rounded-full px-2 py-1.5 transition-all active:scale-90 ${
                 active ? "bg-sunny shadow-sticker-sm" : "hover:bg-cream"
               }`}
             >

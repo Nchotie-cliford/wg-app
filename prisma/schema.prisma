@@ -44,6 +44,10 @@ model Member {
   recurringAddedBy RecurringExpense[] @relation("recurringAddedBy")
   expenseShares    ExpenseShare[]
   blocks           Block[]
+  rulesCreated     HouseRule[]       @relation("ruleCreatedBy")
+  rulesUpdated     HouseRule[]       @relation("ruleUpdatedBy")
+
+  @@index([pinResetRequestedAt])
 }
 
 model Payment {
@@ -194,4 +198,21 @@ model Event {
 
   @@index([addedById])
   @@index([date])
+}
+
+// Shared flat rules: any member can add, edit or delete one.
+model HouseRule {
+  id          Int      @id @default(autoincrement())
+  text        String
+  createdBy   Member   @relation("ruleCreatedBy", fields: [createdById], references: [id])
+  createdById Int
+  // Who last edited it; null until someone does.
+  updatedBy   Member?  @relation("ruleUpdatedBy", fields: [updatedById], references: [id])
+  updatedById Int?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([createdAt])
+  @@index([createdById])
+  @@index([updatedById])
 }
